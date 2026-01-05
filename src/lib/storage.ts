@@ -1,10 +1,11 @@
+import { supabase } from './supabase';
+
 export interface Habit {
     id: string;
     name: string;
     startDate: string;
+    user_id?: string;
 }
-
-const STORAGE_KEY = 'habits';
 
 export const defaultHabits: Habit[] = [
     {
@@ -14,34 +15,90 @@ export const defaultHabits: Habit[] = [
     },
 ];
 
-export const getHabits = (): Habit[] => {
-    if (typeof window === 'undefined') return [];
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-        // Initialize with defaults if empty
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultHabits));
-        return defaultHabits;
+export const getHabits = async (): Promise<Habit[]> => {
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            console.warn('No authenticated user found');
+            return [];
+        }
+
+        const { data, error } = await supabase
+            .from('habits')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('Error fetching habits:', error.message, '| Code:', error.code, '| Details:', error.details);
+            
+            // Provide specific error messages for common issues
+            if (error.code === 'PGRST205') {
+                console.error('Database table not found. Please run the SQL schema from supabase_schema.sql');
+            } else if (error.code === 'PGRST116') {
+                console.error('Database connection issue. Please check your Supabase configuration.');
+            }
+            
+            return [];
+        }
+        
+        // Map database snake_case to frontend camelCase
+        return (data || []).map(row => ({
+            id: row.id,
+            name: row.name,
+            startDate: row.start_date,
+            user_id: row.user_id
+        }));
+    } catch (error) {
+        console.error('Unexpected error in getHabits:', error);
+        return [];
     }
-    return JSON.parse(stored);
 };
 
-export const saveHabit = (habit: Habit) => {
-    const habits = getHabits();
-    const index = habits.findIndex((h) => h.id === habit.id);
+export const saveHabit = async (habit: Habit) => {
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            throw new Error('User not authenticated');
+        }
 
-    if (index >= 0) {
-        // Update existing
-        habits[index] = habit;
-    } else {
-        // Insert new
-        habits.push(habit);
+        const { error } = await supabase
+            .from('habits')
+            .upsert({
+                id: habit.id,
+                name: habit.name,
+                start_date: habit.startDate,
+                user_id: user.id
+            });
+
+        if (error) {
+            console.error('SQL Error details:', error.message, '| Code:', error.code, '| Details:', error.details);
+            
+            // Provide specific error messages for common issues
+            if (error.code === 'PGRST205') {
+                throw new Error('Database table not found. Please run the SQL schema from supabase_schema.sql');
+            } else if (error.code === 'PGRST116') {
+                throw new Error('Database connection issue. Please check your Supabase configuration.');
+            }
+            
+            throw error;
+        }
+    } catch (error) {
+        if (error instanceof Error) {
+            throw error;
+        }
+        throw new Error('Unexpected error while saving habit');
     }
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
 };
 
-export const deleteHabit = (id: string) => {
-    const habits = getHabits();
-    const filtered = habits.filter((h) => h.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+export const deleteHabit = async (id: string) => {
+    const { error } = await supabase
+        .from('habits')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting habit:', error);
+        throw error;
+    }
 };
+

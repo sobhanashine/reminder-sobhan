@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, Quote, Brain, RefreshCw } from "lucide-react";
+import { Sparkles, Quote, Brain } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-
-import { Habit } from "@/lib/storage"; // Import Habit type
+import { supabase } from "@/lib/supabase";
+import { LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 // Accept data and loading as props
 export default function Hero({
@@ -17,11 +17,28 @@ export default function Hero({
     data: { motivationalSentence: string; medicalFact: string } | null;
     loading: boolean;
 }) {
-    // Internal state moved to parent (page.tsx) to allow reactive updates on habit changes
+    const router = useRouter();
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.push("/login");
+    };
 
     return (
         <section className="mb-12 relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-emerald-950/40 via-black/60 to-black/60 p-8 backdrop-blur-2xl shadow-2xl">
             <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-[80px] animate-pulse" />
+            
+            <div className="absolute top-4 left-4 z-20">
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-white/50 hover:text-white hover:bg-white/10 gap-2"
+                    onClick={handleLogout}
+                >
+                    <LogOut className="h-4 w-4" />
+                    <span>خروج</span>
+                </Button>
+            </div>
 
             <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                 <div className="max-w-2xl w-full">

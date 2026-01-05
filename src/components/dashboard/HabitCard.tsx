@@ -3,8 +3,8 @@
 import { Habit, deleteHabit, saveHabit } from "@/lib/storage";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trash2, Flame, Calendar, Trophy, RotateCcw, Share2, Copy } from "lucide-react";
-import { motion, useSpring, useTransform, useMotionValue, animate } from "framer-motion";
+import { Trash2, Flame, Calendar, RotateCcw, Share2, Copy } from "lucide-react";
+import { motion, useTransform, useMotionValue, animate } from "framer-motion";
 import { useState, useEffect } from "react";
 import {
     AlertDialog,
@@ -39,29 +39,50 @@ function AnimatedCounter({ value }: { value: number }) {
 }
 
 export default function HabitCard({ habit, onUpdate, isAdmin }: HabitCardProps) {
-    const [days, setDays] = useState(0);
+    // Use useState with a function that calculates initial state once
+    const [days, setDays] = useState(() => {
+        // This function runs only once during the initial render on the client
+        return Math.floor((Date.now() - new Date(habit.startDate).getTime()) / (1000 * 60 * 60 * 24));
+    });
 
     useEffect(() => {
-        const start = new Date(habit.startDate);
-        const now = new Date();
-        const diff = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-        setDays(diff);
+        // Update days when habit.startDate changes, using a callback to avoid direct setState
+        const updateDays = () => {
+            const calculatedDays = Math.floor((Date.now() - new Date(habit.startDate).getTime()) / (1000 * 60 * 60 * 24));
+            setDays(calculatedDays);
+        };
+        
+        updateDays();
+        
+        // Set up a timer to update days periodically
+        const timer = setInterval(updateDays, 60000); // Update every minute
+
+        return () => clearInterval(timer);
     }, [habit.startDate]);
 
-    const handleDelete = (e?: React.MouseEvent) => {
+    const handleDelete = async (e?: React.MouseEvent) => {
         e?.stopPropagation();
-        deleteHabit(habit.id);
-        onUpdate();
-        toast.error("عادت حذف شد.");
+        try {
+            await deleteHabit(habit.id);
+            onUpdate();
+            toast.error("عادت حذف شد.");
+        } catch (error) {
+            console.error(error);
+            toast.error("خطا در حذف عادت");
+        }
     };
 
-    const handleReset = (e?: React.MouseEvent) => {
+    const handleReset = async (e?: React.MouseEvent) => {
         e?.stopPropagation();
-        const updatedHabit = { ...habit, startDate: new Date().toISOString() };
-        saveHabit(updatedHabit); // Now correctly updates instead of duplicating
-        setDays(0);
-        onUpdate();
-        toast.info("روزشمار صفر شد. دوباره شروع کن!");
+        try {
+            const updatedHabit = { ...habit, startDate: new Date().toISOString() };
+            await saveHabit(updatedHabit); // Now correctly updates instead of duplicating
+            onUpdate(); // This will trigger a re-render with the new start date
+            toast.info("روزشمار صفر شد. دوباره شروع کن!");
+        } catch (error) {
+            console.error(error);
+            toast.error("خطا در بروزرسانی عادت");
+        }
     };
 
     const handleShare = () => {

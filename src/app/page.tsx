@@ -19,12 +19,15 @@ import {
 import { Plus, Medal, Trophy } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { toPersianDate } from "@/lib/utils";
+// import { toPersianDate } from "@/lib/utils"; // Commented out as it's not currently used
 import DatePicker, { DateObject } from "react-multi-date-picker";
 import persian from "react-date-object/calendars/persian";
 import persian_fa from "react-date-object/locales/persian_fa";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
+  const router = useRouter();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newHabitName, setNewHabitName] = useState("");
@@ -36,8 +39,9 @@ export default function Home() {
   const [aiData, setAiData] = useState<{ motivationalSentence: string; medicalFact: string } | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
 
-  const refreshHabits = () => {
-    setHabits(getHabits());
+  const refreshHabits = async () => {
+    const data = await getHabits();
+    setHabits(data);
   };
 
   // Fetch AI Data
@@ -64,10 +68,19 @@ export default function Home() {
   };
 
   useEffect(() => {
-    refreshHabits();
+    const checkAuth = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            router.push("/login");
+            return;
+        }
+        refreshHabits();
+    };
+
+    checkAuth();
     // Reset date to today on mount
     setStartDate(new DateObject({ calendar: persian, locale: persian_fa }));
-  }, []);
+  }, [router]);
 
   // Reactive Effect: Fetch AI whenever habits change (Add, Delete, Reset triggers refreshHabits -> setHabits -> this effect)
   useEffect(() => {
@@ -76,7 +89,7 @@ export default function Home() {
   }, [habits]);
 
 
-  const handleAddHabit = () => {
+  const handleAddHabit = async () => {
     if (!newHabitName.trim()) {
       toast.error("لطفا نام عادت را وارد کنید");
       return;
@@ -96,17 +109,35 @@ export default function Home() {
       startDate: finalStartDate,
     };
 
-    saveHabit(newHabit);
-    setNewHabitName("");
-    setStartDate(new DateObject({ calendar: persian, locale: persian_fa }));
-    setIsDialogOpen(false);
-    refreshHabits(); // This triggers state update -> triggers useEffect -> triggers fetchAI
-
-    toast.success("عادت جدید ثبت شد!", {
-      description: `مسیر ترک "${newHabitName}" با موفقیت شروع شد.`,
-      duration: 4000,
-      className: "bg-emerald-950 border-emerald-800 text-white",
-    });
+    try {
+      await saveHabit(newHabit);
+      setNewHabitName("");
+      setStartDate(new DateObject({ calendar: persian, locale: persian_fa }));
+      setIsDialogOpen(false);
+      await refreshHabits(); // This triggers state update -> triggers useEffect -> triggers fetchAI
+  
+      toast.success("عادت جدید ثبت شد!", {
+        description: `مسیر ترک "${newHabitName}" با موفقیت شروع شد.`,
+        duration: 4000,
+        className: "bg-emerald-950 border-emerald-800 text-white",
+      });
+    } catch (error) {
+       console.error('Error in handleAddHabit:', error);
+       
+       // Provide more specific error messages
+       if (error instanceof Error) {
+         if (error.message.includes('Database table not found')) {
+           toast.error("خطای پایگاه داده. لطفاً با پشتیبانی تماس بگیرید.");
+         } else if (error.message.includes('User not authenticated')) {
+           toast.error("لطفاً ابتدا وارد حساب کاربری خود شوید.");
+           router.push("/login");
+         } else {
+           toast.error(`خطا در ذخیره عادت: ${error.message}`);
+         }
+       } else {
+         toast.error("خطا در ذخیره عادت. لطفاً دوباره تلاش کنید.");
+       }
+    }
   };
 
   // Gamification Logic

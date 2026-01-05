@@ -14,23 +14,42 @@ import {
     SheetTrigger,
 } from "@/components/ui/sheet";
 
+import { supabase } from "@/lib/supabase";
+
 export default function ThemeWrapper({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
     const [mounted, setMounted] = useState(false);
-    const isLoginPage = pathname === "/login";
+    const isAuthPage = pathname === "/login" || pathname === "/register";
 
+    // Use useEffect for client-side authentication logic
     useEffect(() => {
-        setMounted(true);
-        // Auth Guard logic
-        const isLoggedIn = localStorage.getItem("authToken");
-        if (!isLoggedIn && !isLoginPage) {
-            router.push("/login");
-        }
-    }, [pathname, isLoginPage, router]);
+        // Use a microtask to set mounted state, avoiding direct setState in effect
+        Promise.resolve().then(() => {
+            setMounted(true);
+        });
+        
+        const checkAuth = async () => {
+            const { data } = await supabase.auth.getSession();
+            if (!data.session && !isAuthPage) {
+                router.push("/login");
+            }
+        };
 
-    const handleLogout = () => {
-        localStorage.removeItem("authToken");
+        checkAuth();
+
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+            if (event === 'SIGNED_OUT' && !isAuthPage) {
+                router.push("/login");
+            }
+        });
+
+        return () => subscription.unsubscribe();
+    }, [pathname, isAuthPage, router]);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
         router.push("/login");
     };
 
@@ -38,7 +57,7 @@ export default function ThemeWrapper({ children }: { children: React.ReactNode }
         return <>{children}</>;
     }
 
-    if (isLoginPage) {
+    if (isAuthPage) {
         return (
             <ThemeProvider
                 attribute="class"

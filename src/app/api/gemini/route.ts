@@ -26,7 +26,7 @@ export async function POST(request: Request) {
         // Construct a personalized prompt
         let habitsDescription = "";
         if (habitsList.length > 0) {
-            habitsDescription = habitsList.map((h: any) => `- Habit: ${h.name}, Streak: ${h.days} days`).join("\n");
+           habitsDescription = habitsList.map((h: { name: string; days: number }) => `- Habit: ${h.name}, Streak: ${h.days} days`).join("\n");
         } else {
             habitsDescription = "The user has no active habits yet.";
         }
